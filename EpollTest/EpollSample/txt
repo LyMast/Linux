@@ -1,0 +1,2 @@
+g++ EpollTestServer.cpp -o Server
+g++ EpollTestClient.cpp -o Client
