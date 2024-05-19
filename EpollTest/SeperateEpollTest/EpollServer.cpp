@@ -364,7 +364,7 @@ int main(int argc, char* argv[])
         
         while(!g_ShutDown)
         {
-            iEpollRet = epoll_wait(g_EpollFd, events_list, FD_SETSIZE, -1);
+            iEpollRet = epoll_wait(g_SendEventFd, events_list, FD_SETSIZE, -1);
             if(iEpollRet > 0)
             {
                 for(int i = 0; i < iEpollRet ; ++i )
@@ -501,7 +501,7 @@ int main(int argc, char* argv[])
     ev.data.ptr = 0;
     ev.events = EPOLLOUT;   // 엣지 트리거로 Read, Send 가능 상태를 받는다.
 
-    
+
     if(epoll_ctl(g_EpollFd, EPOLL_CTL_ADD, 0, &ev) == -1)
     {
         printf("Fail to Put in Epoll Q\n");

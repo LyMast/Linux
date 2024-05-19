@@ -19,7 +19,7 @@
 
 using namespace std;
 
-//#define df_TEST_BLOCK
+#define df_TEST_BLOCK
 
 static int g_listenSocket = -1;
 static bool g_ShutDown = false;

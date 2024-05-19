@@ -118,7 +118,8 @@ int main(int argc, char* argv[])
             cout << "\n";
             cin >> ForBlock;
         }
-        Retval = recv(Socket, BlockRecv, 1000000, 0);        
+        Retval = recv(Socket, BlockRecv, 1000000, 0);
+        cout << Retval << endl;        
         //*/
 
 #endif
