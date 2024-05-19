@@ -24,6 +24,7 @@ using namespace std;
 static int g_listenSocket = -1;
 static bool g_ShutDown = false;
 static int g_EpollFd;
+static int g_SendEventFd;
 
 
 struct SOCKET_INFO
@@ -91,6 +92,14 @@ int main(int argc, char* argv[])
         printf("Fail to Create Epoll\n");
         return -1;
     }
+    g_SendEventFd = epoll_create1(EPOLL_CLOEXEC);
+    if(g_SendEventFd < 0)
+    {
+        printf("Fail to Create Epoll\n");
+        return -1;
+    }
+
+    
 
     // listen
     int ListenRetval = listen(g_listenSocket, SOMAXCONN);
@@ -109,6 +118,7 @@ int main(int argc, char* argv[])
         struct sockaddr_in clientaddr;
 
         struct epoll_event ev;
+
         uint addrlen = sizeof(clientaddr);
 
         while(!g_ShutDown)
@@ -138,9 +148,9 @@ int main(int argc, char* argv[])
 
             printf("Accept Clinet : IP [%s] Port [%u], addrlen : %d\n", pInfo->IP, pInfo->Port, addrlen);
 
-            memset(&ev, 0, sizeof(ev));
+            memset(&ev, 0, sizeof(epoll_event));
             ev.data.ptr = (void*)pInfo;
-            ev.events = EPOLLIN | EPOLLOUT | EPOLLET;   // 엣지 트리거로 Read, Send 가능 상태를 받는다.
+            ev.events = EPOLLIN  | EPOLLET;   // 엣지 트리거로 Read, Send 가능 상태를 받는다.
             if(epoll_ctl(g_EpollFd, EPOLL_CTL_ADD, clientSocket, &ev) == -1)
             {
                 printf("Fail to Put in Epoll Q\n");
@@ -154,6 +164,28 @@ int main(int argc, char* argv[])
                 close(clientSocket);
                 continue;
             }
+
+
+            memset(&ev, 0, sizeof(epoll_event));
+            ev.data.ptr = (void*)pInfo;
+            ev.events = EPOLLOUT  | EPOLLET;   // 엣지 트리거로 Read, Send 가능 상태를 받는다.
+            if(epoll_ctl(g_SendEventFd, EPOLL_CTL_ADD, clientSocket, &ev) == -1)
+            {
+                printf("Fail to Put in Epoll Q\n");
+
+                
+                g_listLock.lock();
+                g_list.erase(remove(g_list.begin(), g_list.end(), pInfo), g_list.end());
+                g_listLock.unlock();
+                
+                delete pInfo;
+                close(clientSocket);
+                continue;
+            }
+
+
+
+
 
             printf("Success to Put in Epoll Q!\n");
 
@@ -282,34 +314,8 @@ int main(int argc, char* argv[])
                                     break;
                                 }
                             }
-                        }
-                        
+                        }          
 #endif
-
-                    }
-
-                
-                    // SendProc // 
-
-                    // 관측 현상 
-                    //  1. - 맨 처음 연결을 수립하고 epoll에 들어오면 한 번 발생.
-                    //  2. - Recv 가능 상태로 변화 함에때라 에지 트리거가 발생하면 EPOLLOUT 트리거도 같이 발생한다.
-
-                    //  3. - (확인해야할 상황) : Send가 불가능한 상황을 인위적으로 만들고 나서 EPOLLOUT이 언제 발생하는지 확인 필요.
-                    //  4. - (확인해야할 상황) : Send가 
-
-                    //if(  !(events_list[i].events & EPOLLIN) && events_list[i].events & EPOLLOUT)
-                    if(events_list[i].events & EPOLLOUT)
-                    {
-
-                        printf("[Epoll Send Edge Event Occur!]  \n\n");
-
-                        if(events_list[i].data.ptr == 0)
-                        {
-                            printf("Epoll Thread ShutDown!!\n");
-                            continue;
-                        }
-
                     }
 
                     // EpollError
@@ -346,6 +352,80 @@ int main(int argc, char* argv[])
 
 
     });
+
+
+    thread SendEventThread = thread([]()->void{
+
+        struct epoll_event events_list[FD_SETSIZE];
+        int iEpollRet;
+
+        char MessageBuf[2024];
+        SOCKET_INFO* pInfo;
+        
+        while(!g_ShutDown)
+        {
+            iEpollRet = epoll_wait(g_EpollFd, events_list, FD_SETSIZE, -1);
+            if(iEpollRet > 0)
+            {
+                for(int i = 0; i < iEpollRet ; ++i )
+                {
+                    if(events_list[i].events & EPOLLOUT)
+                    {
+
+                        printf("[S-E][Epoll Send Edge Event Occur!]  \n\n");
+                        if(events_list[i].data.ptr == 0)
+                        {
+                            printf("SendEvent Thread ShutDown!!\n");
+                            continue;
+                        }
+                    }
+                    // EpollError
+                    if(events_list[i].events & EPOLLERR)
+                    {
+
+                        printf("[S-E][Epoll Error Edge Event Occur!]  \n");
+                    }
+
+
+                    // HangUp?
+                    if(events_list[i].events & EPOLLHUP)
+                    {
+
+                        printf("[S-E][Epoll EPOLLHUP Edge Event Occur!]  \n");
+                    }
+
+                    // ShutDown
+                    if(events_list[i].events & EPOLLRDHUP)
+                    {
+
+                         printf("[S-E][Epoll EPOLLRDHUP Edge Event Occur!]  \n");
+                    }
+
+                    printf("-------------------------%d-------------------------\n", i);
+
+                }
+
+            }
+
+        }
+
+
+    });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     string str;
     while(!g_ShutDown)
@@ -415,25 +495,38 @@ int main(int argc, char* argv[])
         printf("Fail to create pip!\n");
     }
 
-
+ 
 
     struct epoll_event ev;
     ev.data.ptr = 0;
     ev.events = EPOLLOUT;   // 엣지 트리거로 Read, Send 가능 상태를 받는다.
+
+    
     if(epoll_ctl(g_EpollFd, EPOLL_CTL_ADD, 0, &ev) == -1)
     {
         printf("Fail to Put in Epoll Q\n");
     }
 
+    if(epoll_ctl(g_SendEventFd, EPOLL_CTL_ADD, 0, &ev) == -1)
+    {
+        printf("Fail to Put in Epoll Q\n");
+    }
+
+
+
+
     EpollThread.join();
+    SendEventThread.join();
+
     close(filedes[0]);
     close(filedes[1]);
     close(g_EpollFd);
+    close(g_SendEventFd);
 
     cout << "Epoll join" << endl;
 
 
-    
+
 
 
 }
