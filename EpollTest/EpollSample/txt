@@ -1,2 +1,2 @@
-g++ EpollTestServer.cpp -o Server
+g++ EpollTestServer.cpp -o Server.out`
 g++ EpollTestClient.cpp -o Client
