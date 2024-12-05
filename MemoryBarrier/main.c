@@ -2,18 +2,25 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+
 int g_flag[2] = { 0, };
 int g_turn = 0;
 int g_count = 0;
 
 #define df_LOOP  500000
-#define MB
+//#define MB
+//#define ATOMIC
+
 
 void* test1(void* arg)
 {
 	int loop = 0;
+	int sync = 0;
+
 	while(1)
 	{
+
+		/* Lock */
 		g_flag[0] = 1;
 		g_turn = 1;
 
@@ -21,7 +28,11 @@ void* test1(void* arg)
 		 __sync_synchronize();
 #endif
 
-		/* Lock */
+#ifdef ATOMIC
+		__sync_fetch_and_add(&sync, 1);
+#endif
+
+		/* Polling */
 		while(g_flag[1] && g_turn == 1);
 
 		/* Critical Section */
@@ -42,8 +53,11 @@ void* test1(void* arg)
 void* test2(void* arg)
 {
 	int loop = 0;
+	int sync = 0;
+
 	while(1)
 	{
+		/* Lock */
 		g_flag[1] = 1;
 		g_turn = 0;
 
@@ -51,7 +65,11 @@ void* test2(void* arg)
 		 __sync_synchronize();
 #endif
 
-		/* Lock */
+#ifdef ATOMIC
+		__sync_fetch_and_add(&sync, 1);
+#endif
+
+		/* Polling */
 		while(g_flag[0] && g_turn == 0);
 
 		/* Critical Section */
