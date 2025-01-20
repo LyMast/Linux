@@ -9,7 +9,7 @@ int g_count = 0;
 
 #define df_LOOP  500000
 //#define MB
-//#define ATOMIC
+#define ATOMIC
 
 
 void* test1(void* arg)

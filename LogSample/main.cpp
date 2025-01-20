@@ -10,7 +10,6 @@ static char g_TempBuffer[df_BUFFER_SIZE] = {0,};
 void Log(const char* szType, int LogLevel, const char* szStringFormat, ...);
 
 
-
 int main(int argc, char* argv[])
 {
 
@@ -28,7 +27,6 @@ int main(int argc, char* argv[])
 
     return 0;
 }
-
 
 
 void Log(const char* szType, int LogLevel, const char* szStringFormat, ...)
